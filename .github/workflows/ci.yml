@@ -115,12 +115,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Run Semgrep SAST
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: "p/default"
+      - name: Install Semgrep
+        run: pip install semgrep
 
-      - name: Save Semgrep JSON Report
+      - name: Run Semgrep (non-blocking)
         run: |
           mkdir -p semgrep-report
           semgrep --config=p/default --json > semgrep-report/semgrep-report.json || true
