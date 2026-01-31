@@ -102,3 +102,4 @@ jobs:
         with:
           name: trivy-report
           path: trivy-report/trivy-report.json
+          
