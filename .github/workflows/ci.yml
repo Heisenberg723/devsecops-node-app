@@ -107,23 +107,26 @@ jobs:
           name: trivy-report
           path: trivy-report/trivy-report.json
 
-  sast-codeql:
+  sast:
     runs-on: ubuntu-latest
     needs: build
-    env:
-      CODEQL_TELEMETRY_DISABLED: true
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+      - name: Run Semgrep SAST
+        uses: returntocorp/semgrep-action@v1
         with:
-          languages: javascript
+          config: "p/default"
 
-      - name: Run CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+      - name: Save Semgrep JSON Report
+        run: |
+          mkdir -p semgrep-report
+          semgrep --config=p/default --json > semgrep-report/semgrep-report.json || true
+
+      - name: Upload Semgrep Report
+        uses: actions/upload-artifact@v4
         with:
-          upload: true
-          wait-for-processing: false
+          name: semgrep-report
+          path: semgrep-report/semgrep-report.json
