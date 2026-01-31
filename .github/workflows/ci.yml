@@ -157,4 +157,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zap-report
-          path: zap-report/zap-report.html
+          path: zap-report
+
