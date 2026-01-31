@@ -1,0 +1,21 @@
+name: Container Scan
+
+on:
+  push:
+    paths:
+      - Dockerfile
+      - .dockerignore
+  workflow_dispatch:
+
+jobs:
+  docker-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: docker build -t app:latest .
+      - run: |
+          trivy image app:latest --format json -o trivy.json || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy.json
