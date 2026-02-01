@@ -102,22 +102,33 @@ jobs:
   dast:
     runs-on: ubuntu-latest
     needs: docker-scan
+
     steps:
       - uses: actions/checkout@v3
 
-      - run: docker build -t devsecops-node-app:latest .
+      - name: Build Docker image
+        run: docker build -t devsecops-node-app:latest .
 
-      - run: |
+      - name: Run app container
+        run: |
           docker run -d -p 3000:3000 --name nodeapp devsecops-node-app:latest
-          sleep 15
+          sleep 25
 
-      - run: |
+      - name: Run OWASP ZAP Baseline Scan
+        run: |
           mkdir -p zap-report
-          docker run --network host -v $(pwd)/zap-report:/zap/wrk \
+          docker run --network host \
+            -v $(pwd)/zap-report:/zap/wrk \
             owasp/zap2docker-stable \
-            zap-baseline.py -t http://localhost:3000 -r zap-report.html || true
+            zap-baseline.py -t http://127.0.0.1:3000 -r /zap/wrk/zap-report.html || true
 
-      - uses: actions/upload-artifact@v4
+      - name: Debug ZAP output
+        run: |
+          echo "Files in zap-report:"
+          ls -l zap-report || true
+
+      - name: Upload ZAP Report
+        uses: actions/upload-artifact@v4
         with:
           name: zap-report
           path: zap-report
