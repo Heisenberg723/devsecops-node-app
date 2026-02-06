@@ -154,11 +154,13 @@ jobs:
         uses: zaproxy/action-baseline@v0.10.0
         with:
           target: http://localhost:3000
-          cmd_options: -r zap-report.html
         continue-on-error: true
 
-      - name: Upload ZAP report
+      - name: Upload ZAP reports
         uses: actions/upload-artifact@v4
         with:
-          name: zap-dast-report
-          path: zap-report.html
+          name: zap-dast-reports
+          path: |
+            report_html.html
+            report_md.md
+            report_json.json
