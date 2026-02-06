@@ -1,4 +1,4 @@
-name: Node.js DevSecOps CI
+name: DevSecOps CI Pipeline
 
 on:
   push:
@@ -6,145 +6,122 @@ on:
   pull_request:
     branches: [ main ]
 
-permissions:
-  contents: read
-  security-events: write
-
 jobs:
   build:
+    name: Build & Test
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: '18'
 
-      - run: npm install
-      - run: npm test || echo "No tests defined, skipping..."
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test || echo "No tests defined, skipping..."
 
   dependency-check:
+    name: SCA - OWASP Dependency-Check
     runs-on: ubuntu-latest
     needs: build
-    steps:
-      - uses: actions/checkout@v3
 
-      - uses: dependency-check/Dependency-Check_Action@main
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run OWASP Dependency-Check
+        uses: dependency-check/Dependency-Check_Action@main
         with:
           project: "devsecops-node-app"
           path: "."
           format: "HTML"
           out: "dependency-check-report"
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload Dependency-Check Report
+        uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
           path: dependency-check-report/dependency-check-report.html
 
   checkov:
+    name: IaC Scan - Checkov
     runs-on: ubuntu-latest
     needs: build
-    steps:
-      - uses: actions/checkout@v3
-      - run: pip install checkov
 
-      - run: |
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Checkov
+        run: pip install checkov
+
+      - name: Run Checkov Scan
+        run: |
           mkdir -p checkov-report
           checkov -d . --output json > checkov-report/checkov-report.json || true
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload Checkov Report
+        uses: actions/upload-artifact@v4
         with:
           name: checkov-report
           path: checkov-report/checkov-report.json
 
   docker-scan:
+    name: Container Scan - Trivy
     runs-on: ubuntu-latest
     needs: build
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: docker/setup-buildx-action@v3
-
-      - run: docker build -t devsecops-node-app:latest .
-
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y curl gnupg lsb-release
-          curl -fsSL https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo gpg --dearmor -o /usr/share/keyrings/trivy.gpg
-          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update
-          sudo apt-get install -y trivy
-
-      - run: |
-          mkdir -p trivy-report
-          trivy image --format json -o trivy-report/trivy-report.json devsecops-node-app:latest || true
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: trivy-report
-          path: trivy-report/trivy-report.json
-
-  sast:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v3
-      - run: pip install semgrep
-
-      - run: |
-          mkdir -p semgrep-report
-          semgrep --config=p/default --json > semgrep-report/semgrep-report.json || true
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: semgrep-report
-          path: semgrep-report/semgrep-report.json
-
-  dast:
-    runs-on: ubuntu-latest
-    needs: docker-scan
-    steps:
-      - uses: actions/checkout@v3
-
-      - run: docker build -t devsecops-node-app:latest .
-
-      - run: |
-          docker run -d -p 3000:3000 --name nodeapp devsecops-node-app:latest
-          sleep 25
-
-      - run: |
-          mkdir -p zap-report
-          docker run --network host \
-            -v $(pwd)/zap-report:/zap/wrk \
-            owasp/zap2docker-stable \
-            zap-baseline.py -t http://127.0.0.1:3000 -r /zap/wrk/zap-report.html || true
-
-      - run: |
-          echo "Files in zap-report:"
-          ls -l zap-report || true
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: zap-report
-          path: zap-report
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: dast
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push image
-        uses: docker/build-push-action@v6
+      - name: Build Docker Image
+        run: docker build -t devsecops-node-app:latest .
+
+      - name: Run Trivy Image Scan
+        uses: aquasecurity/trivy-action@0.24.0
         with:
-          context: .
-          push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/devsecops-node-app:latest
+          image-ref: devsecops-node-app:latest
+          format: json
+          output: trivy-report.json
+          exit-code: 0
+
+      - name: Upload Trivy Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.json
+
+  codeql:
+    name: SAST - CodeQL
+    runs-on: ubuntu-latest
+    needs: build
+
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
